@@ -1,34 +1,44 @@
+import java.util.Arrays;
 
 public class Triangle {
     private double a;
     private double b;
     private double c;
 
-    public double takeA() {
+    public double getA() {
         return a;
     }
 
-    public void putA(double a) {
+    public void setA(double a) {
+        if (a <= 0) throw new IllegalArgumentException("Side must be positive");
         this.a = a;
     }
 
-    public double takeB() {
+    public double getB() {
         return b;
     }
 
-    public void putB(double b) {
+    public void setB(double b) {
+        if (b <= 0) throw new IllegalArgumentException("Side must be positive");
         this.b = b;
     }
 
-    public double takeC() {
+    public double getC() {
         return c;
     }
 
-    public void putC(double c) {
+    public void setC(double c) {
+        if (c <= 0) throw new IllegalArgumentException("Side must be positive");
         this.c = c;
     }
 
     public Triangle(double a, double b, double c) {
+        if (a <= 0 || b <= 0 || c <= 0) {
+            throw new IllegalArgumentException("Sides must be positive");
+        }
+        if (a + b <= c || a + c <= b || b + c <= a) {
+            throw new IllegalArgumentException("Invalid triangle sides");
+        }
         this.a = a;
         this.b = b;
         this.c = c;
@@ -37,42 +47,38 @@ public class Triangle {
     public Triangle() {
     }
 
-   public double perim() {
+    public double perimeter() {
         return a + b + c;
-   }
+    }
 
-   public double area() {
-        return Math.sqrt(0.5*perim()*(0.5*perim()-a)*(0.5*perim()-b)*(0.5*perim()-c));
-   }
+    public double area() {
+        double s = perimeter() / 2;
+        return Math.sqrt(s * (s - a) * (s - b) * (s - c));
+    }
 
-   public  boolean  equilateral(){
-        if (a == b && b == c){
-            return true;
-        } else return false;
-
-   }
-
-    @Override
-    public String toString() {
-        return "Triangle{" +
-                "a=" + a +
-                ", b=" + b +
-                ", c=" + c +
-                '}';
+    public boolean isEquilateral() {
+        return a == b && b == c;
     }
 
     @Override
-    public final boolean equals(Object o) {
-        if (!(o instanceof Triangle triangle)) return false;
+    public String toString() {
+        return String.format("Triangle{a=%s, b=%s, c=%s}", a, b, c);
+    }
 
-        return Double.compare(a, triangle.a) == 0 && Double.compare(b, triangle.b) == 0 && Double.compare(c, triangle.c) == 0;
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Triangle other)) return false;
+        return Arrays.equals(sortedSides(), other.sortedSides());
     }
 
     @Override
     public int hashCode() {
-        int result = Double.hashCode(a);
-        result = 31 * result + Double.hashCode(b);
-        result = 31 * result + Double.hashCode(c);
-        return result;
+        return Arrays.hashCode(sortedSides());
+    }
+
+    private double[] sortedSides() {
+        double[] sides = {a, b, c};
+        Arrays.sort(sides);
+        return sides;
     }
 }

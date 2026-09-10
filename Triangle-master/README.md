@@ -20,7 +20,7 @@ Triangle.java refactoring
 
 8. Empty constructor `Triangle()` leaves the object with all sides equal to 0.0
 
-9. ![alt text](image.png) Method `perim()` has a 3-space indent instead of 4
+9. Method `perim()` has a 3-space indent instead of 4
 
 10. `area()` also has a 3-space indent instead of 4
 
