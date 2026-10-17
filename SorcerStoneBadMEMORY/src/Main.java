@@ -1,11 +1,13 @@
 import java.io.IOException;
+import java.io.BufferedInputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Locale;
+import java.util.PriorityQueue;
 
 /*
   @author   yelyza
@@ -25,39 +27,60 @@ void main() throws IOException {
 
     LocalDateTime start = LocalDateTime.now();
 
-    String rawText = readBookText(BOOK_FILE_PATH);
-    String cleanedText = cleanText(rawText);
-    String[] sortedWords = splitAndSortWords(cleanedText);
+    String[] sortedWords = readSortedWords(BOOK_FILE_PATH);
 
     String[] uniqueWords = findUniqueWords(sortedWords);
     int[] wordFrequencies = countWordFrequencies(uniqueWords, sortedWords);
 
-    String[] wordsWithFrequency = mergeWordsWithFrequencies(uniqueWords, wordFrequencies);
-    sortByFrequencyAscending(wordsWithFrequency);
+    String[] topWords = findTopWords(uniqueWords, wordFrequencies, TOP_WORDS_COUNT);
 
-    printTopWords(wordsWithFrequency, TOP_WORDS_COUNT);
+    printTopWords(topWords);
 
     LocalDateTime finish = LocalDateTime.now();
     System.out.println("Elapsed time (ms):");
     System.out.println(ChronoUnit.MILLIS.between(start, finish));
 }
 
-String readBookText(String filePath) throws IOException {
-    return new String(Files.readAllBytes(Paths.get(filePath)));
-}
+// Optimization 1: the book is streamed through a small buffer instead of being loaded as one big String.
+// Optimization 2: cleaning and splitting happen in one pass while reading, so no regex copy,
+//                 no lowercase copy and no split() array.
+String[] readSortedWords(String filePath) throws IOException {
+    String[] words = new String[1024];
+    int count = 0;
+    StringBuilder word = new StringBuilder();
 
-String cleanText(String rawText) {
-    return rawText.replaceAll("[^A-Za-z ]", " ").toLowerCase(Locale.ROOT);
-}
+    try (InputStream in = new BufferedInputStream(Files.newInputStream(Paths.get(filePath)))) {
+        int b;
+        while ((b = in.read()) != -1) {
+            if (b >= 'A' && b <= 'Z') {
+                word.append((char) (b + ('a' - 'A')));
+            } else if (b >= 'a' && b <= 'z') {
+                word.append((char) b);
+            } else if (word.length() > 0) {
+                if (count == words.length) {
+                    words = Arrays.copyOf(words, count * 2);
+                }
+                words[count++] = word.toString();
+                word.setLength(0);
+            }
+        }
+    }
+    if (word.length() > 0) {
+        if (count == words.length) {
+            words = Arrays.copyOf(words, count + 1);
+        }
+        words[count++] = word.toString();
+    }
 
-String[] splitAndSortWords(String cleanedText) {
-    String[] words = cleanedText.split(" +");
+    words = Arrays.copyOf(words, count);
     Arrays.sort(words);
     return words;
 }
 
+// Optimization 3: the array of unique words starts small and grows only when needed, instead of being
+//                 allocated with the size of ALL words (there are far fewer unique words than words).
 String[] findUniqueWords(String[] sortedWords) {
-    String[] uniqueWords = new String[sortedWords.length];
+    String[] uniqueWords = new String[1024];
     int uniqueCount = 0;
 
     for (int i = 0; i < sortedWords.length; i++) {
@@ -71,6 +94,9 @@ String[] findUniqueWords(String[] sortedWords) {
         }
 
         if (!alreadySeen) {
+            if (uniqueCount == uniqueWords.length) {
+                uniqueWords = Arrays.copyOf(uniqueWords, uniqueCount * 2);
+            }
             uniqueWords[uniqueCount] = sortedWords[i];
             uniqueCount++;
         }
@@ -95,23 +121,33 @@ int[] countWordFrequencies(String[] uniqueWords, String[] allWords) {
     return frequencies;
 }
 
-String[] mergeWordsWithFrequencies(String[] uniqueWords, int[] frequencies) {
-    String[] wordsWithFrequency = new String[uniqueWords.length];
+// Optimization 4: counts stay as ints, so no "word count" strings and no regex parsing inside the comparator.
+// Optimization 5: only the top N are kept in a small heap instead of sorting every unique word;
+//                 "word count" strings are built for those N only.
+// Order is the same as before: higher frequency first, equal frequency -> alphabetically later word first.
+String[] findTopWords(String[] words, int[] frequencies, int topCount) {
+    Comparator<Integer> weakestFirst = Comparator
+            .<Integer>comparingInt(i -> frequencies[i])
+            .thenComparing(i -> words[i]);
+    PriorityQueue<Integer> heap = new PriorityQueue<>(topCount + 1, weakestFirst);
 
-    for (int i = 0; i < uniqueWords.length; i++) {
-        wordsWithFrequency[i] = uniqueWords[i] + " " + frequencies[i];
+    for (int i = 0; i < words.length; i++) {
+        heap.offer(i);
+        if (heap.size() > topCount) {
+            heap.poll();
+        }
     }
 
-    return wordsWithFrequency;
+    String[] top = new String[heap.size()];
+    for (int i = top.length - 1; i >= 0; i--) {
+        int index = heap.poll();
+        top[i] = words[index] + " " + frequencies[index];
+    }
+    return top;
 }
 
-void sortByFrequencyAscending(String[] wordsWithFrequency) {
-    Arrays.sort(wordsWithFrequency, Comparator.comparing(
-            entry -> Integer.valueOf(entry.replaceAll("[^0-9]", ""))));
-}
-
-void printTopWords(String[] wordsWithFrequencySortedAscending, int topCount) {
-    for (int i = 0; i < topCount; i++) {
-        System.out.println(wordsWithFrequencySortedAscending[wordsWithFrequencySortedAscending.length - 1 - i]);
+void printTopWords(String[] topWords) {
+    for (String line : topWords) {
+        System.out.println(line);
     }
 }

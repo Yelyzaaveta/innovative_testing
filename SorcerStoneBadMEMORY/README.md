@@ -1,31 +1,23 @@
-# Lab 2 - Good Bad Code
-
 Orynchuk Yelyzaveta
 
-Main.java refactoring (bad ver)
+Main.java refactoring Memory Optimization
 
-1. File starts with an empty line.
+RESULTS:
 
-2. File has no `import` statements - doesn't compile.
+Memory used by the bad version: ~102 MB allocated on the heap, ~157 MB max RSS
+Execution time of the bad version: ~4.5-8.5 s (median 4.8 s)
 
-3. `void main()` has no class and no method name other than `main` - everything is in one giant unnamed block.
+Memory used by the memory optimized version: ~8.1 MB allocated on the heap, ~57 MB max RSS
+Execution time of the memory optimized version: ~5.0-5.6 s (median 5.1 s)
 
-4. File path `"src/txt/harry.txt"` is hardcoded directly in the middle of the logic instead of a named constant.
+MEMORY OPTIMIZATION PROPOSALS: BAD -> MEMORY OPTIMIZED
 
-5. `int size = content.length();` unused 
+1. Read the book piece by piece instead of loading the whole text into memory at once.
 
-6. `words.length` is not what the comment says - `// 400 000` is magic-number comment ???
+2. Clean the text and split it into words in a single pass while reading. Before, every step (remove extra characters, make lowercase, split into words) created another full copy of the text.
 
-7. `distinctString.contains(words[i])` checks if the word is a *substring* of the accumulated string, not if it equals one of the already-seen words (I make it because it doesnt workkk)
+3. Do not create the array for unique words with the size of ALL words. There are far fewer unique words than words, so start with a small array and make it bigger only when needed.
 
-8. `// 5 000` magic-number comment
+4. Do not glue the word and the number into one string ("the 3630") and then pull the number back out of the string. Keep the number as a number, so thousands of extra temporary strings are not created.
 
-9. `distincts[i] += " " + freq[i];` glues a word and its count into a single strin
-
-10. Magic number `30`
-
-11. Variable names give no idea what they hold: `distincts`, `freq`, `str`, `words[j]`
-
-12. No blank-line/indentation consistency !!!
-
-13. `System.out.println("------");` not cool we can use gaps with explain
+5. For the top 30, keep only the 30 best words instead of sorting all of them. The "word number" text is built only for these 30.
