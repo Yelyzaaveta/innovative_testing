@@ -1,29 +1,24 @@
-package chnu.edu.inno.controller;
+package chnu.edu.APILAB.controller;
 
 
 /*
-  @author   george
-  @project   inno
+ @author  Orynchuk Yelyzaveta
+  @project   APILAB
   @class  ItemController
   @version  1.0.0 
   @since 27/09/2026 - 19.09
 */
 
-import chnu.edu.inno.model.Item;
-import chnu.edu.inno.model.dto.response.ApiResponse;
-import chnu.edu.inno.model.dto.response.BaseMetaData;
-import chnu.edu.inno.model.dto.response.PaginationMetaData;
-import chnu.edu.inno.service.ItemService;
+import chnu.edu.APILAB.model.dto.ItemDto;
+import chnu.edu.APILAB.model.dto.response.ApiResponse;
+import chnu.edu.APILAB.model.dto.response.BaseMetaData;
+import chnu.edu.APILAB.model.dto.response.PaginationMetaData;
+import chnu.edu.APILAB.service.ItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.StringToClassMapItem;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.AllArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @AllArgsConstructor
@@ -32,73 +27,51 @@ public class ItemController {
 
     private final ItemService itemService;
 
-    @GetMapping("/{id}")
-    public Item getItemById(@PathVariable String id) {
-        return itemService.getItemById(id);
+    @GetMapping("/{code}")
+    @Operation(summary = "Get one item by its code", description = "200 - found, 404 - no item with this code")
+    public ResponseEntity<ApiResponse<BaseMetaData, ItemDto>> getItemByCode(@PathVariable String code) {
+        return respond(itemService.getItemByCode(code));
     }
 
-    @GetMapping()
-    public List<Item> getAllItems() {
-        return itemService.getAllItems();
+    @GetMapping
+    @Operation(
+            summary = "Get ALL items (in the order they were added), PAGEABLE. Default 5 items per page",
+            description = "200 - page returned (empty list if there are no items), "
+                    + "400 - negative page or wrong size, 404 - page number is bigger than the last page"
+    )
+    public ResponseEntity<ApiResponse<PaginationMetaData, ItemDto>> getItemsPage(
+            @Parameter(description = "Request parameter. Page of paginated result, starts from zero")
+            @RequestParam(name = "page", defaultValue = "0", required = false) int page,
+            @Parameter(description = "Request parameter. Number of items on a page, from 1 to 100")
+            @RequestParam(name = "size", defaultValue = "5", required = false) int size
+    ) {
+        return respond(itemService.getPage(page, size));
     }
 
     @PostMapping
-    public Item createItem(@RequestBody Item item) {
-        return itemService.createItem(item);
+    @Operation(summary = "Create an item", description = "201 - created, 400 - name, code or quantity is wrong, 409 - an item with this code already exists")
+    public ResponseEntity<ApiResponse<BaseMetaData, ItemDto>> createItem(@RequestBody ItemDto item) {
+        return respond(itemService.createItem(item));
     }
 
-    @PutMapping
-    public Item updateItem(@RequestBody Item item) {
-        return itemService.updateItem(item);
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteItem(@PathVariable String id) {
-        itemService.deleteItemById(id);
-    }
-
-    //----------------  More ---------------------------
-
-    @GetMapping("/response/{id}")
-    public ApiResponse<BaseMetaData, Item> getItemByIdAsApiResponse(@PathVariable String id) {
-        return itemService.getItemByIdAsApiResponse(id);
-    }
-
-    @GetMapping("/page")
+    @PutMapping("/{code}")
     @Operation(
-            method = "GET",
-            summary = "Get  ALL items, ASC, PAGEABLE. Default 5 items per page",
-            description = "Fetch a PAGE of items  by page number and size "
+            summary = "Update an item",
+            description = "200 - updated, 400 - name, code or quantity is wrong, 404 - no item with this code, "
+                    + "409 - the new code belongs to another item"
     )
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200",
-                    description = "Success. Return page of items",
-                    content = {
-                            @Content(
-                                    mediaType = "application/json",
-                                    schema = @Schema(
-                                            type = "object",
-                                            properties = {
-                                                    @StringToClassMapItem(key = "meta", value = PaginationMetaData.class),
-                                                    @StringToClassMapItem(key = "data", value = Item.class)
-                                            }
-                                    )
-                            )
-                    }
-            )
-    })
-    public ApiResponse<PaginationMetaData, Item> getItemsPage(
-            @Parameter(description = "Request parameter. Page of paginated result. Cannot be less than zero")
-            @RequestParam(name = "page", defaultValue = "0", required = false) Integer page,
-            @Parameter(description = "Request parameter. Size of paginated page result. Cannot be less than zero")
-            @RequestParam(name = "size", defaultValue = "5", required = false) Integer size
-    ) {
-        return itemService.getPage(page, size);
+    public ResponseEntity<ApiResponse<BaseMetaData, ItemDto>> updateItem(
+            @PathVariable String code, @RequestBody ItemDto item) {
+        return respond(itemService.updateItem(code, item));
     }
 
+    @DeleteMapping("/{code}")
+    @Operation(summary = "Delete an item", description = "200 - deleted (data is empty), 404 - no item with this code")
+    public ResponseEntity<ApiResponse<BaseMetaData, ItemDto>> deleteItem(@PathVariable String code) {
+        return respond(itemService.deleteItemByCode(code));
+    }
 
-
-
-
+    private <M extends BaseMetaData, D> ResponseEntity<ApiResponse<M, D>> respond(ApiResponse<M, D> response) {
+        return ResponseEntity.status(response.getMeta().getCode()).body(response);
+    }
 }

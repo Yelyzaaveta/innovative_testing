@@ -1,4 +1,4 @@
-package chnu.edu.inno.model.dto.response;
+package chnu.edu.APILAB.model.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
