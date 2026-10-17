@@ -8,7 +8,6 @@ RESULTS:
 |---|---|---|---|---|
 | First (bad) version | ~4.5-8.5 s | 4.8 s | ~102 MB | ~157 MB |
 | Bad version (previous) | ~5.0-5.6 s | 5.1 s | ~8.1 MB | ~57 MB |
-| Memory optimized version | ~4.3-9.7 s | 5.3 s | ~8.1 MB | ~59 MB |
 | Time optimized version | ~0.12-0.21 s | 0.15 s | ~6.6 MB | ~56 MB |
 
 
