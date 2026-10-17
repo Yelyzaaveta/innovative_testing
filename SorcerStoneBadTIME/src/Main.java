@@ -1,13 +1,11 @@
 import java.io.IOException;
-import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.PriorityQueue;
+import java.util.HashMap;
+import java.util.Map;
 
 /*
   @author   yelyza
@@ -27,12 +25,8 @@ void main() throws IOException {
 
     LocalDateTime start = LocalDateTime.now();
 
-    String[] sortedWords = readSortedWords(BOOK_FILE_PATH);
-
-    String[] uniqueWords = findUniqueWords(sortedWords);
-    int[] wordFrequencies = countWordFrequencies(uniqueWords, sortedWords);
-
-    String[] topWords = findTopWords(uniqueWords, wordFrequencies, TOP_WORDS_COUNT);
+    Map<String, int[]> wordFrequencies = countWords(BOOK_FILE_PATH);
+    String[] topWords = findTopWords(wordFrequencies, TOP_WORDS_COUNT);
 
     printTopWords(topWords);
 
@@ -41,107 +35,76 @@ void main() throws IOException {
     System.out.println(ChronoUnit.MILLIS.between(start, finish));
 }
 
-// Optimization 1: the book is streamed through a small buffer instead of being loaded as one big String.
-// Optimization 2: cleaning and splitting happen in one pass while reading, so no regex copy,
-//                 no lowercase copy and no split() array.
-String[] readSortedWords(String filePath) throws IOException {
-    String[] words = new String[1024];
-    int count = 0;
+// Time optimization 1: count words with a HashMap (word -> count) instead of the nested loops
+//                      "find unique words" + "count every unique word over all words" (O(n^2) -> O(n)).
+// Time optimization 2: no sorting of all ~80 000 words, the HashMap does not need sorted input.
+// Time optimization 3: words are counted right when they are read, so there is no array of all words
+//                      to fill, copy and walk through again.
+// Time optimization 4: the file is read in blocks of 8 KB instead of one byte per read() call.
+// Time optimization 5: the map is created with enough room for the unique words, so it never has to rehash.
+Map<String, int[]> countWords(String filePath) throws IOException {
+    Map<String, int[]> frequencies = new HashMap<>(16384);
     StringBuilder word = new StringBuilder();
 
-    try (InputStream in = new BufferedInputStream(Files.newInputStream(Paths.get(filePath)))) {
-        int b;
-        while ((b = in.read()) != -1) {
-            if (b >= 'A' && b <= 'Z') {
-                word.append((char) (b + ('a' - 'A')));
-            } else if (b >= 'a' && b <= 'z') {
-                word.append((char) b);
-            } else if (word.length() > 0) {
-                if (count == words.length) {
-                    words = Arrays.copyOf(words, count * 2);
+    try (InputStream in = Files.newInputStream(Paths.get(filePath))) {
+        byte[] block = new byte[8192];
+        int read;
+        while ((read = in.read(block)) != -1) {
+            for (int i = 0; i < read; i++) {
+                int b = block[i];
+                if (b >= 'A' && b <= 'Z') {
+                    word.append((char) (b + ('a' - 'A')));
+                } else if (b >= 'a' && b <= 'z') {
+                    word.append((char) b);
+                } else if (word.length() > 0) {
+                    frequencies.computeIfAbsent(word.toString(), w -> new int[1])[0]++;
+                    word.setLength(0);
                 }
-                words[count++] = word.toString();
-                word.setLength(0);
             }
         }
     }
     if (word.length() > 0) {
-        if (count == words.length) {
-            words = Arrays.copyOf(words, count + 1);
-        }
-        words[count++] = word.toString();
-    }
-
-    words = Arrays.copyOf(words, count);
-    Arrays.sort(words);
-    return words;
-}
-
-// Optimization 3: the array of unique words starts small and grows only when needed, instead of being
-//                 allocated with the size of ALL words (there are far fewer unique words than words).
-String[] findUniqueWords(String[] sortedWords) {
-    String[] uniqueWords = new String[1024];
-    int uniqueCount = 0;
-
-    for (int i = 0; i < sortedWords.length; i++) {
-        boolean alreadySeen = false;
-
-        for (int j = 0; j < uniqueCount; j++) {
-            if (uniqueWords[j].equals(sortedWords[i])) {
-                alreadySeen = true;
-                break;
-            }
-        }
-
-        if (!alreadySeen) {
-            if (uniqueCount == uniqueWords.length) {
-                uniqueWords = Arrays.copyOf(uniqueWords, uniqueCount * 2);
-            }
-            uniqueWords[uniqueCount] = sortedWords[i];
-            uniqueCount++;
-        }
-    }
-
-    return Arrays.copyOf(uniqueWords, uniqueCount);
-}
-
-int[] countWordFrequencies(String[] uniqueWords, String[] allWords) {
-    int[] frequencies = new int[uniqueWords.length];
-
-    for (int i = 0; i < uniqueWords.length; i++) {
-        int count = 0;
-        for (int j = 0; j < allWords.length; j++) {
-            if (uniqueWords[i].equals(allWords[j])) {
-                count++;
-            }
-        }
-        frequencies[i] = count;
+        frequencies.computeIfAbsent(word.toString(), w -> new int[1])[0]++;
     }
 
     return frequencies;
 }
 
-// Optimization 4: counts stay as ints, so no "word count" strings and no regex parsing inside the comparator.
-// Optimization 5: only the top N are kept in a small heap instead of sorting every unique word;
-//                 "word count" strings are built for those N only.
-// Order is the same as before: higher frequency first, equal frequency -> alphabetically later word first.
-String[] findTopWords(String[] words, int[] frequencies, int topCount) {
-    Comparator<Integer> weakestFirst = Comparator
-            .<Integer>comparingInt(i -> frequencies[i])
-            .thenComparing(i -> words[i]);
-    PriorityQueue<Integer> heap = new PriorityQueue<>(topCount + 1, weakestFirst);
+// Time optimization 6: the top N is kept in a small sorted array and a new word is inserted only if it beats
+//                      the weakest one. No PriorityQueue, no comparators, no boxed Integers.
+// Order: higher frequency first, equal frequency -> alphabetically later word first.
+String[] findTopWords(Map<String, int[]> frequencies, int topCount) {
+    String[] topWords = new String[topCount];
+    int[] topCounts = new int[topCount];
+    int size = 0;
 
-    for (int i = 0; i < words.length; i++) {
-        heap.offer(i);
-        if (heap.size() > topCount) {
-            heap.poll();
+    for (Map.Entry<String, int[]> entry : frequencies.entrySet()) {
+        int count = entry.getValue()[0];
+        String word = entry.getKey();
+
+        if (size == topCount) {
+            int last = size - 1;
+            if (count < topCounts[last] || (count == topCounts[last] && word.compareTo(topWords[last]) < 0)) {
+                continue;
+            }
+            size--;
         }
+
+        int pos = size;
+        while (pos > 0 && (topCounts[pos - 1] < count
+                || (topCounts[pos - 1] == count && topWords[pos - 1].compareTo(word) < 0))) {
+            topWords[pos] = topWords[pos - 1];
+            topCounts[pos] = topCounts[pos - 1];
+            pos--;
+        }
+        topWords[pos] = word;
+        topCounts[pos] = count;
+        size++;
     }
 
-    String[] top = new String[heap.size()];
-    for (int i = top.length - 1; i >= 0; i--) {
-        int index = heap.poll();
-        top[i] = words[index] + " " + frequencies[index];
+    String[] top = new String[size];
+    for (int i = 0; i < size; i++) {
+        top[i] = topWords[i] + " " + topCounts[i];
     }
     return top;
 }
